@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Tetris Denas</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    min-height:100vh;
+    background:linear-gradient(135deg,#0a0a0a 0%, #1e1e1e 100%);
+    font-family:'Segoe UI',Helvetica,Arial,sans-serif;
+    color:#fff;
+    padding:20px;
+  }
+  h1{
+    position:absolute;
+    top:10px;
+    width:100%;
+    text-align:center;
+    font-size:36px;
+    letter-spacing:3px;
+    background:linear-gradient(90deg,#ff6ec4,#7873f5);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .wrapper{
+    display:flex;
+    gap:40px;
+    margin-top:70px;
+  }
+  .msg{
+    width:220px;
+    padding:20px;
+    background:#ffffff08;
+    border:1px solid #ffffff22;
+    border-radius:12px;
+    font-size:18px;
+    line-height:1.4;
+    align-self:center;
+  }
+  .photo-area{
+    width:220px;
+    height:220px;
+    background:#ffffff08;
+    border:2px dashed #ffffff44;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+  .photo-area img{
+    max-width:100%;
+    max-height:100%;
+    border-radius:8px;
+    object-fit:cover;
+  }
+  .photo-area span{
+    position:absolute;
+    color:#ffffff88;
+    font-size:14px;
+    pointer-events:none;
+  }
+  #board{
+    border:2px solid #ffffff33;
+    border-radius:8px;
+    background:#222831;
+  }
+</style>
+</head>
+<body>
+  <!-- Tela de Game Over -->
+<div id="over" style="
+  position:fixed;
+  inset:0;
+  background:#000c;
+  display:none;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  font-size:28px;
+  z-index:10;
+">
+  Game Over<br>
+  <button onclick="restart()" style="margin-top:20px;padding:10px 20px;font-size:18px;border:none;border-radius:6px;cursor:pointer;">
+    Reiniciar
+  </button>
+</div>
+
+<h1>Tetris da Denise</h1>
+
+<div class="wrapper">
+  <div class="msg">
+    <strong>Para minha mammys,</strong><br><br>
+    Cada linha que eu limpo neste jogo me lembra o quanto você me ajudou a crescer na vida.<br>
+    Obrigado por cada ensinamento.<br>
+    Te amo!
+  </div>
+
+  <canvas id="board" width="300" height="600"></canvas>
+
+  <div class="photo-area">
+    <img id="pic" src="foto-mae.png" alt="Foto com a mamãe">
+  </div>
+</div>
+
+<script>
+const COLS = 10, ROWS = 20, B = 30;
+const CV = document.getElementById('board');
+const CX = CV.getContext('2d');
+const SC = document.createElement('div');
+SC.id='score';
+SC.style.position='absolute';
+SC.style.top='0';
+SC.style.left='0';
+SC.style.padding='6px 12px';
+SC.style.background='#00000077';
+SC.style.borderRadius='0 0 8px 0';
+CV.parentElement.style.position='relative';
+CV.parentElement.appendChild(SC);
+
+const PALETTE = [
+  '#00f5ff','#fffa00','#c000ff','#00ff3c',
+  '#ff0040','#0060ff','#ff8c00'
+];
+
+const PIECES = [
+  [ [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]] ],
+  [ [[1,1],[1,1]] ],
+  [ [[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]],
+    [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]] ],
+  [ [[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]] ],
+  [ [[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]] ],
+  [ [[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]],
+    [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]] ],
+  [ [[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]],
+    [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]] ]
+];
+
+let board, piece, next, dropT, score, level, over;
+
+function createBoard() {
+  return Array.from({length:ROWS},()=>Array(COLS).fill(-1));
+}
+function randPiece() {
+  const id = Math.floor(Math.random()*PIECES.length);
+  return { id, x:3, y:0, rot:0, matrix:PIECES[id][0] };
+}
+function drawBlock(x,y,color,ghost=false) {
+  CX.fillStyle = ghost ? '#ffffff22' : PALETTE[color];
+  CX.fillRect(x*B,y*B,B,B);
+  CX.strokeStyle = ghost ? '#ffffff77' : '#000';
+  CX.strokeRect(x*B,y*B,B,B);
+}
+function drawMatrix(mat,x0,y0,color,ghost=false) {
+  mat.forEach((row,y)=>row.forEach((cell,x)=>{
+    if(cell) drawBlock(x0+x,y0+y,color,ghost);
+  }));
+}
+function drawBoard() {
+  CX.fillStyle='#222831';
+  CX.fillRect(0,0,CV.width,CV.height);
+  board.forEach((row,y)=>row.forEach((c,x)=>{
+    if(c!==-1) drawBlock(x,y,c);
+  }));
+}
+function drawGhost() {
+  let y=piece.y;
+  while(!collide(piece.x,++y,piece.matrix));
+  drawMatrix(piece.matrix,piece.x,y-1,piece.id,true);
+}
+function collide(x,y,mat) {
+  for(let r=0;r<mat.length;r++)
+    for(let c=0;c<mat[r].length;c++)
+      if(mat[r][c] && (board[y+r]?.[x+c]!==-1)) return true;
+  return false;
+}
+function placePiece() {
+  piece.matrix.forEach((row,y)=>row.forEach((cell,x)=>{
+    if(cell) board[piece.y+y][piece.x+x]=piece.id;
+  }));
+  let lines=0;
+  outer: for(let y=ROWS-1;y>=0;y--){
+    for(let x=0;x<COLS;x++) if(board[y][x]===-1) continue outer;
+    board.splice(y,1); board.unshift(Array(COLS).fill(-1));
+    lines++; y++;
+  }
+  if(lines){
+    score += [0,40,100,300,1200][lines]*(level+1);
+    level = Math.floor(score/400);
+    dropT = Math.max(50,500-level*50);
+  }
+  piece = next; next = randPiece();
+  if(collide(piece.x,piece.y,piece.matrix)) over=true;
+}
+function rotate(dir){
+  const rot = (piece.rot+dir+PIECES[piece.id].length)%PIECES[piece.id].length;
+  const mat = PIECES[piece.id][rot];
+  if(!collide(piece.x,piece.y,mat)){
+    piece.rot = rot; piece.matrix = mat;
+  }
+}
+function move(dx){
+  if(!collide(piece.x+dx,piece.y,piece.matrix)) piece.x += dx;
+}
+function drop(){
+  if(!collide(piece.x,piece.y+1,piece.matrix)) piece.y++;
+  else placePiece();
+}
+function hardDrop(){
+  while(!collide(piece.x,piece.y+1,piece.matrix)) piece.y++;
+  drop();
+}
+function draw() {
+  drawBoard();
+  if(!over){ drawGhost(); drawMatrix(piece.matrix,piece.x,piece.y,piece.id); }
+  SC.textContent='Pontos: '+score+'  Nível: '+level;
+}
+let last = 0, elapsed = 0;
+function update(time){
+  if(over){
+    document.getElementById('over').style.display='flex';
+    return;
+  }
+  if(!last) last = time;
+  elapsed += time - last;
+  last = time;
+  if(elapsed > dropT){ drop(); elapsed = 0; }
+  draw();
+  requestAnimationFrame(update);
+}
+function restart(){
+  board = createBoard();
+  piece = randPiece();
+  next  = randPiece();
+  score = 0;
+  level = 0;
+  dropT = 500;
+  over = false;
+  SC.textContent = 'Pontos: 0  Nível: 0';
+// Força a exibição do placar na página
+  SC.style.display = 'block';
+  last = elapsed = 0;
+  requestAnimationFrame(update);
+}
+window.addEventListener('keydown',e=>{
+  if(over) return;
+  if(e.code==='ArrowLeft') move(-1);
+  if(e.code==='ArrowRight') move(1);
+  if(e.code==='ArrowDown') { drop(); elapsed=0; }
+  if(e.code==='ArrowUp') rotate(1);
+  if(e.code==='Space') { hardDrop(); elapsed=0; }
+});
+restart();
+</script>
+</body>
+</html>
